@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Molecular Builder & Bonding</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DragControls.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+        body { margin: 0; overflow: hidden; background-color: #030712; font-family: 'Prompt', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        .element-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .element-btn:hover { transform: translateY(-1px); }
+        .glass-top { background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 2px; }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.6); }
+            50% { box-shadow: 0 0 50px rgba(56, 189, 248, 0.9); }
+        }
+        .reaction-glow { animation: pulseGlow 0.8s infinite; }
+    </style>
+</head>
+<body class="bg-slate-950 text-white select-none overflow-hidden">
+
+    <!-- Top Navigation Bar: Strictly single flat row, perfectly aligned -->
+    <header class="absolute top-0 left-0 right-0 z-30 glass-top px-4 py-2.5 flex items-center justify-between shadow-2xl w-full gap-3 overflow-x-auto whitespace-nowrap custom-scrollbar">
+        <!-- Left: Logo & Title -->
+        <div class="flex items-center gap-3 shrink-0">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xs font-bold bg-gradient-to-r from-cyan-400 to-sky-200 bg-clip-text text-transparent">3D Molecular Builder</h1>
+                <p class="text-[10px] text-slate-400">ห้องปฏิบัติการพันธะเคมี & ปฏิกิริยา</p>
+            </div>
+        </div>
+
+        <!-- Center: Spawners & Presets in a single flat row -->
+        <div class="flex items-center gap-2 shrink-0">
+            <!-- Element Spawners -->
+            <div class="flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+                <button id="spawn-h" class="element-btn bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer">
+                    <span class="w-2 h-2 rounded-full bg-slate-100 inline-block"></span> H
+                </button>
+                <button id="spawn-o" class="element-btn bg-rose-950/60 hover:bg-rose-900/60 text-rose-200 text-xs font-semibold py-1 px-2.5 rounded-lg border border-rose-800/60 flex items-center gap-1 cursor-pointer">
+                    <span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> O
+                </button>
+                <button id="spawn-c" class="element-btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold py-1 px-2.5 rounded-lg border border-zinc-700 flex items-center gap-1 cursor-pointer">
+                    <span class="w-2 h-2 rounded-full bg-zinc-500 inline-block"></span> C
+                </button>
+                <button id="spawn-n" class="element-btn bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 text-xs font-semibold py-1 px-2.5 rounded-lg border border-blue-800/60 flex items-center gap-1 cursor-pointer">
+                    <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> N
+                </button>
+            </div>
+
+            <div class="h-5 w-px bg-slate-700/80 mx-1"></div>
+
+            <!-- Quick Presets -->
+            <div class="flex items-center gap-1">
+                <button onclick="loadPreset('h2')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">H₂</button>
+                <button onclick="loadPreset('water')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">H₂O</button>
+                <button onclick="loadPreset('o2')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">O₂</button>
+                <button onclick="loadPreset('methane')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">CH₄</button>
+                <button onclick="loadPreset('methane_combustion')" class="bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 text-xs py-1 px-2.5 rounded-xl border border-cyan-700/60 transition-all cursor-pointer shadow-sm shadow-cyan-500/20">CH₄ + 2O₂</button>
+                <button onclick="loadPreset('co2')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">CO₂</button>
+                <button onclick="loadPreset('ammonia')" class="bg-slate-900/60 hover:bg-cyan-950/40 text-slate-300 hover:text-cyan-300 text-xs py-1 px-2 rounded-xl border border-slate-800 hover:border-cyan-800/60 transition-all cursor-pointer">NH₃</button>
+            </div>
+        </div>
+
+        <!-- Right: Formula & Actions -->
+        <div class="flex items-center gap-2 shrink-0">
+            <!-- Formula Display -->
+            <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-xl">
+                <span class="text-[10px] text-slate-400">สมการ/สูตร:</span>
+                <span id="formula-text" class="text-xs font-bold text-cyan-300">-</span>
+            </div>
+
+            <!-- Reaction Synthesize Button (Hidden by default) -->
+            <button id="btn-react" class="hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-semibold py-1 px-3 rounded-xl shadow-lg shadow-teal-600/30 transition-all cursor-pointer items-center gap-1.5 reaction-glow">
+                <span>⚡ สังเคราะห์สารตามสมการ</span>
+            </button>
+
+            <button id="btn-clear-bonds" class="bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium py-1 px-2 rounded-xl transition-all border border-slate-700 cursor-pointer">
+                ล้างเส้น
+            </button>
+            <button id="btn-reset" class="bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-semibold py-1 px-2 rounded-xl shadow-lg shadow-rose-600/20 transition-all cursor-pointer">
+                รีเซ็ต
+            </button>
+        </div>
+    </header>
+
+    <!-- Reaction Info Banner Modal / Overlay -->
+    <div id="reaction-modal" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 bg-slate-900/90 border border-slate-700/80 backdrop-blur-md px-4 py-2 rounded-2xl shadow-2xl text-center hidden pointer-events-none transition-all duration-300">
+        <p id="reaction-info-title" class="text-xs font-bold text-cyan-400"></p>
+        <p id="reaction-info-desc" class="text-[10px] text-slate-300 mt-0.5"></p>
+    </div>
+
+    <!-- Notification / Reaction Flash Overlay -->
+    <div id="reaction-flash" class="absolute inset-0 bg-gradient-to-r from-orange-500/30 via-emerald-500/20 to-cyan-500/30 pointer-events-none opacity-0 transition-opacity duration-300 z-20"></div>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x030712, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 14);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true;
+        controls.mouseButtons = {
+            LEFT: THREE.MOUSE.PAN,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.ROTATE
+        };
+        controls.minDistance = 4;
+        controls.maxDistance = 35;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+        dirLight.position.set(15, 25, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const pointLight = new THREE.PointLight(0x38bdf8, 2.5, 30);
+        pointLight.position.set(-15, -10, 10);
+        scene.add(pointLight);
+
+        const materials = {
+            H: new THREE.MeshPhysicalMaterial({ color: 0xf8fafc, roughness: 0.1, metalness: 0.05, clearcoat: 0.9 }),
+            O: new THREE.MeshPhysicalMaterial({ color: 0xf43f5e, roughness: 0.12, metalness: 0.05, clearcoat: 0.95 }),
+            C: new THREE.MeshPhysicalMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.2, clearcoat: 0.5 }),
+            N: new THREE.MeshPhysicalMaterial({ color: 0x3b82f6, roughness: 0.15, metalness: 0.1, clearcoat: 0.9 })
+        };
+
+        const elementConfigs = {
+            H: { radius: 0.65, maxBonds: 1, name: 'Hydrogen' },
+            O: { radius: 0.95, maxBonds: 2, name: 'Oxygen' },
+            C: { radius: 1.05, maxBonds: 4, name: 'Carbon' },
+            N: { radius: 0.95, maxBonds: 3, name: 'Nitrogen' }
+        };
+
+        const allMolecules = [];
+        const bonds = [];
+        let dragControls;
+
+        function spawnElement(type, customPos = null) {
+            const config = elementConfigs[type];
+            const group = new THREE.Group();
+            
+            const geometry = new THREE.SphereGeometry(config.radius, 32, 32);
+            const mesh = new THREE.Mesh(geometry, materials[type]);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            mesh.userData = {
+                molecule: group,
+                maxBonds: config.maxBonds,
+                currentBonds: 0,
+                element: type
+            };
+
+            group.add(mesh);
+            group.userData = { type: type, atoms: [mesh] };
+
+            if (customPos) {
+                group.position.copy(customPos);
+            } else {
+                const randomX = (Math.random() - 0.5) * 6;
+                const randomY = (Math.random() - 0.5) * 4;
+                group.position.set(randomX, randomY, 0);
+            }
+
+            scene.add(group);
+            allMolecules.push(group);
+            if (dragControls) {
+                dragControls.objects = allMolecules;
+            }
+            updateChemicalFormula();
+            return group;
+        }
+
+        dragControls = new THREE.DragControls(allMolecules, camera, renderer.domElement);
+
+        let draggedGroup = null;
+        let startGroupPos = new THREE.Vector3();
+
+        dragControls.addEventListener('dragstart', (event) => {
+            controls.enabled = false;
+            draggedGroup = event.object;
+            draggedGroup.scale.set(1.05, 1.05, 1.05);
+            startGroupPos.copy(draggedGroup.position);
+        });
+
+        dragControls.addEventListener('drag', (event) => {
+            const group = event.object;
+            group.position.z = 0; 
+            
+            const deltaX = group.position.x - startGroupPos.x;
+            const deltaY = group.position.y - startGroupPos.y;
+            const deltaZ = 0;
+
+            const visitedGroups = new Set([group]);
+            const queue = [group];
+
+            while (queue.length > 0) {
+                const currentGroup = queue.shift();
+                
+                bonds.forEach(bond => {
+                    const molA = bond.atomA.userData.molecule;
+                    const molB = bond.atomB.userData.molecule;
+
+                    let neighborGroup = null;
+                    if (molA === currentGroup && !visitedGroups.has(molB)) {
+                        neighborGroup = molB;
+                    } else if (molB === currentGroup && !visitedGroups.has(molA)) {
+                        neighborGroup = molA;
+                    }
+
+                    if (neighborGroup) {
+                        visitedGroups.add(neighborGroup);
+                        queue.push(neighborGroup);
+                        neighborGroup.position.add(new THREE.Vector3(deltaX, deltaY, deltaZ));
+                    }
+                });
+            }
+
+            startGroupPos.copy(group.position);
+            updateAllBonds();
+        });
+
+        dragControls.addEventListener('dragend', (event) => {
+            controls.enabled = true;
+            event.object.scale.set(1, 1, 1);
+            draggedGroup = null;
+        });
+
+        let firstSelectedAtom = null;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('dblclick', (event) => {
+            if (event.clientY < 65) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            
+            const allAtoms = [];
+            allMolecules.forEach(mol => {
+                if (mol.userData.atoms) allAtoms.push(...mol.userData.atoms);
+            });
+
+            const intersects = raycaster.intersectObjects(allAtoms, true);
+
+            if (intersects.length > 0) {
+                const clickedAtom = intersects[0].object;
+
+                if (!firstSelectedAtom) {
+                    if (clickedAtom.userData.currentBonds < clickedAtom.userData.maxBonds) {
+                        firstSelectedAtom = clickedAtom;
+                        firstSelectedAtom.material.emissive.setHex(0x38bdf8);
+                    }
+                } else {
+                    if (firstSelectedAtom === clickedAtom) {
+                        firstSelectedAtom.material.emissive.setHex(0x000000);
+                        firstSelectedAtom = null;
+                    } else {
+                        if (firstSelectedAtom.userData.molecule !== clickedAtom.userData.molecule &&
+                            firstSelectedAtom.userData.currentBonds < firstSelectedAtom.userData.maxBonds &&
+                            clickedAtom.userData.currentBonds < firstSelectedAtom.userData.maxBonds) {
+                            
+                            mergeMolecules(firstSelectedAtom, clickedAtom);
+                        }
+                        firstSelectedAtom.material.emissive.setHex(0x000000);
+                        firstSelectedAtom = null;
+                    }
+                }
+            } else {
+                if (firstSelectedAtom) {
+                    firstSelectedAtom.material.emissive.setHex(0x000000);
+                    firstSelectedAtom = null;
+                }
+            }
+        });
+
+        function mergeMolecules(atomA, atomB) {
+            const molA = atomA.userData.molecule;
+            const molB = atomB.userData.molecule;
+
+            if (molA !== molB) {
+                const molBAtoms = [...molB.userData.atoms];
+                molBAtoms.forEach(atom => {
+                    molB.remove(atom);
+                    molA.add(atom);
+                    atom.position.copy(molA.worldToLocal(atom.getWorldPosition(new THREE.Vector3())));
+                });
+
+                molA.userData.atoms.push(...molBAtoms);
+
+                scene.remove(molB);
+                const index = allMolecules.indexOf(molB);
+                if (index > -1) {
+                    allMolecules.splice(index, 1);
+                }
+            }
+
+            createBondBetweenAtoms(atomA, atomB);
+            updateChemicalFormula();
+        }
+
+        function createBondBetweenAtoms(atomA, atomB) {
+            const existingBonds = bonds.filter(b => (b.atomA === atomA && b.atomB === atomB) || (b.atomA === atomB && b.atomB === atomA));
+            const isDouble = existingBonds.length > 0;
+
+            const geometry = new THREE.CylinderGeometry(0.08, 0.08, 1, 16);
+            const material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3 });
+            const cylinder = new THREE.Mesh(geometry, material);
+            cylinder.castShadow = true;
+            scene.add(cylinder);
+
+            const bondData = {
+                mesh: cylinder,
+                atomA: atomA,
+                atomB: atomB,
+                isDouble: isDouble
+            };
+
+            bonds.push(bondData);
+            atomA.userData.currentBonds++;
+            atomB.userData.currentBonds++;
+
+            updateAllBonds();
+        }
+
+        function updateAllBonds() {
+            const pairMap = new Map();
+            bonds.forEach(bond => {
+                const key = bond.atomA.id < bond.atomB.id ? `${bond.atomA.id}-${bond.atomB.id}` : `${bond.atomB.id}-${bond.atomA.id}`;
+                if (!pairMap.has(key)) pairMap.set(key, []);
+                pairMap.get(key).push(bond);
+            });
+
+            pairMap.forEach((pairBonds) => {
+                const posA = new THREE.Vector3();
+                const posB = new THREE.Vector3();
+                pairBonds[0].atomA.getWorldPosition(posA);
+                pairBonds[0].atomB.getWorldPosition(posB);
+
+                const distance = posA.distanceTo(posB);
+                const dir = new THREE.Vector3().subVectors(posB, posA).normalize();
+                
+                const up = new THREE.Vector3(0, 1, 0);
+                let perp = new THREE.Vector3().crossVectors(dir, up);
+                if (perp.lengthSq() < 0.001) {
+                    perp.crossVectors(dir, new THREE.Vector3(1, 0, 0));
+                }
+                perp.normalize().multiplyScalar(0.18);
+
+                if (pairBonds.length === 1) {
+                    const bond = pairBonds[0];
+                    bond.mesh.position.copy(posA).add(posB).multiplyScalar(0.5);
+                    bond.mesh.scale.set(1, distance, 1);
+                    bond.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                    bond.mesh.visible = true;
+                } else {
+                    const bond1 = pairBonds[0];
+                    const bond2 = pairBonds[1];
+
+                    bond1.mesh.position.copy(posA).add(posB).multiplyScalar(0.5).add(perp);
+                    bond1.mesh.scale.set(1, distance, 1);
+                    bond1.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                    bond1.mesh.visible = true;
+
+                    bond2.mesh.position.copy(posA).add(posB).multiplyScalar(0.5).sub(perp);
+                    bond2.mesh.scale.set(1, distance, 1);
+                    bond2.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                    bond2.mesh.visible = true;
+                }
+            });
+        }
+
+        let isDraggingBond = false;
+        let activeBondGroup = null;
+        let lastMousePos = new THREE.Vector2();
+
+        window.addEventListener('pointerdown', (event) => {
+            if (event.clientY < 65) return;
+            if (event.button !== 0) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const allBondsMeshes = bonds.map(b => b.mesh);
+            const intersects = raycaster.intersectObjects(allBondsMeshes, true);
+
+            if (intersects.length > 0) {
+                const clickedMesh = intersects[0].object;
+                const foundBond = bonds.find(b => b.mesh === clickedMesh);
+                if (foundBond) {
+                    isDraggingBond = true;
+                    controls.enabled = false;
+                    activeBondGroup = foundBond.atomA.userData.molecule;
+                    lastMousePos.set(event.clientX, event.clientY);
+                }
+            }
+        });
+
+        window.addEventListener('pointermove', (event) => {
+            if (!isDraggingBond || !activeBondGroup) return;
+
+            const deltaX = (event.clientX - lastMousePos.x) * 0.015;
+            const deltaY = (event.clientY - lastMousePos.y) * -0.015;
+
+            const visitedGroups = new Set([activeBondGroup]);
+            const queue = [activeBondGroup];
+
+            while (queue.length > 0) {
+                const currentGroup = queue.shift();
+                currentGroup.position.x += deltaX;
+                currentGroup.position.y += deltaY;
+
+                bonds.forEach(bond => {
+                    const molA = bond.atomA.userData.molecule;
+                    const molB = bond.atomB.userData.molecule;
+
+                    let neighborGroup = null;
+                    if (molA === currentGroup && !visitedGroups.has(molB)) {
+                        neighborGroup = molB;
+                    } else if (molB === currentGroup && !visitedGroups.has(molA)) {
+                        neighborGroup = molA;
+                    }
+
+                    if (neighborGroup) {
+                        visitedGroups.add(neighborGroup);
+                        queue.push(neighborGroup);
+                    }
+                });
+            }
+
+            lastMousePos.set(event.clientX, event.clientY);
+            updateAllBonds();
+        });
+
+        window.addEventListener('pointerup', () => {
+            if (isDraggingBond) {
+                isDraggingBond = false;
+                activeBondGroup = null;
+                controls.enabled = true;
+            }
+        });
+
+        function getWorkspaceMolecules() {
+            const visitedAtoms = new Set();
+            const componentList = [];
+
+            allMolecules.forEach(mol => {
+                mol.userData.atoms.forEach(atom => {
+                    if (!visitedAtoms.has(atom)) {
+                        const compAtoms = [];
+                        const queue = [atom];
+                        visitedAtoms.add(atom);
+
+                        while (queue.length > 0) {
+                            const curr = queue.shift();
+                            compAtoms.push(curr);
+
+                            bonds.forEach(b => {
+                                let neighbor = null;
+                                if (b.atomA === curr && !visitedAtoms.has(b.atomB)) neighbor = b.atomB;
+                                if (b.atomB === curr && !visitedAtoms.has(b.atomA)) neighbor = b.atomA;
+
+                                if (neighbor) {
+                                    visitedAtoms.add(neighbor);
+                                    queue.push(neighbor);
+                                }
+                            });
+                        }
+
+                        const counts = { C: 0, H: 0, O: 0, N: 0 };
+                        compAtoms.forEach(a => {
+                            if (counts[a.userData.element] !== undefined) {
+                                counts[a.userData.element]++;
+                            }
+                        });
+
+                        // Check internal bonds for specific molecular categorization
+                        let formulaStr = '';
+                        if (counts.C > 0) formulaStr += 'C' + (counts.C > 1 ? counts.C : '');
+                        if (counts.H > 0) formulaStr += 'H' + (counts.H > 1 ? counts.H : '');
+                        if (counts.O > 0) formulaStr += 'O' + (counts.O > 1 ? counts.O : '');
+                        if (counts.N > 0) formulaStr += 'N' + (counts.N > 1 ? counts.N : '');
+
+                        if (formulaStr) componentList.push(formulaStr);
+                    }
+                });
+            });
+            return componentList;
+        }
+
+        function checkReactionFeasibility(freqMap) {
+            const btnReact = document.getElementById('btn-react');
+            let canReact = false;
+
+            // Define supported reactions and their required reactant frequencies
+            const supportedReactions = [
+                { H2: 2, O2: 1 }, // 2H2 + O2 -> 2H2O
+                { CH4: 1, O2: 2 }, // CH4 + 2O2 -> CO2 + 2H2O
+                { N2: 1, H2: 3 }  // N2 + 3H2 -> 2NH3
+            ];
+
+            for (const reaction of supportedReactions) {
+                let matchesReaction = true;
+                for (const [molecule, requiredCount] of Object.entries(reaction)) {
+                    if ((freqMap[molecule] || 0) < requiredCount) {
+                        matchesReaction = false;
+                        break;
+                    }
+                }
+                if (matchesReaction) {
+                    canReact = true;
+                    break;
+                }
+            }
+
+            if (canReact) {
+                btnReact.classList.remove('hidden');
+                btnReact.classList.add('flex');
+            } else {
+                btnReact.classList.add('hidden');
+                btnReact.classList.remove('flex');
+            }
+        }
+
+        function updateChemicalFormula() {
+            const componentFormulas = getWorkspaceMolecules();
+            if (componentFormulas.length === 0) {
+                document.getElementById('formula-text').innerText = '-';
+                checkReactionFeasibility({}); // Update button visibility
+                return;
+            }
+            // Count frequencies of each formula in workspace
+            const freqMap = {};
+            componentFormulas.forEach(f => freqMap[f] = (freqMap[f] || 0) + 1);
+            
+            checkReactionFeasibility(freqMap); // Update button visibility based on current molecules
+
+            const displayArr = Object.entries(freqMap).map(([f, count]) => (count > 1 ? `${count}${f}` : f));
+            document.getElementById('formula-text').innerText = displayArr.join(' + ');
+        }
+
+        function loadPreset(type) {
+            const offsetX = (Math.random() - 0.5) * 6;
+            const offsetY = (Math.random() - 0.5) * 4;
+
+            if (type === 'h2') {
+                const h1 = spawnElement('H', new THREE.Vector3(offsetX - 0.6, offsetY, 0));
+                const h2 = spawnElement('H', new THREE.Vector3(offsetX + 0.6, offsetY, 0));
+                mergeMolecules(h1.userData.atoms[0], h2.userData.atoms[0]);
+            } else if (type === 'water') {
+                const o = spawnElement('O', new THREE.Vector3(offsetX, offsetY, 0));
+                const h1 = spawnElement('H', new THREE.Vector3(offsetX - 1.2, offsetY + 0.8, 0));
+                const h2 = spawnElement('H', new THREE.Vector3(offsetX + 1.2, offsetY + 0.8, 0));
+                mergeMolecules(o.userData.atoms[0], h1.userData.atoms[0]);
+                mergeMolecules(o.userData.atoms[0], h2.userData.atoms[0]);
+            } else if (type === 'o2') {
+                const o1 = spawnElement('O', new THREE.Vector3(offsetX - 0.9, offsetY, 0));
+                const o2 = spawnElement('O', new THREE.Vector3(offsetX + 0.9, offsetY, 0));
+                mergeMolecules(o1.userData.atoms[0], o2.userData.atoms[0]);
+                mergeMolecules(o1.userData.atoms[0], o2.userData.atoms[0]);
+            } else if (type === 'methane') {
+                const c = spawnElement('C', new THREE.Vector3(offsetX, offsetY, 0));
+                const h1 = spawnElement('H', new THREE.Vector3(offsetX - 1.5, offsetY, 0));
+                const h2 = spawnElement('H', new THREE.Vector3(offsetX + 1.5, offsetY, 0));
+                const h3 = spawnElement('H', new THREE.Vector3(offsetX, offsetY + 1.5, 0));
+                const h4 = spawnElement('H', new THREE.Vector3(offsetX, offsetY - 1.5, 0));
+                mergeMolecules(c.userData.atoms[0], h1.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h2.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h3.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h4.userData.atoms[0]);
+            } else if (type === 'methane_combustion') {
+                // Spawn CH4 + 2O2 as reactants matching: CH4 + 2O2 -> CO2 + 2H2O
+                const c = spawnElement('C', new THREE.Vector3(-3.5, 0, 0));
+                const h1 = spawnElement('H', new THREE.Vector3(-5.0, 0, 0));
+                const h2 = spawnElement('H', new THREE.Vector3(-2.0, 0, 0));
+                const h3 = spawnElement('H', new THREE.Vector3(-3.5, 1.5, 0));
+                const h4 = spawnElement('H', new THREE.Vector3(-3.5, -1.5, 0));
+                mergeMolecules(c.userData.atoms[0], h1.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h2.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h3.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], h4.userData.atoms[0]);
+
+                // First O2 molecule
+                const o1a = spawnElement('O', new THREE.Vector3(0.5, 1.2, 0));
+                const o1b = spawnElement('O', new THREE.Vector3(2.3, 1.2, 0));
+                mergeMolecules(o1a.userData.atoms[0], o1b.userData.atoms[0]);
+                mergeMolecules(o1a.userData.atoms[0], o1b.userData.atoms[0]);
+
+                // Second O2 molecule
+                const o2a = spawnElement('O', new THREE.Vector3(0.5, -1.2, 0));
+                const o2b = spawnElement('O', new THREE.Vector3(2.3, -1.2, 0));
+                mergeMolecules(o2a.userData.atoms[0], o2b.userData.atoms[0]);
+                mergeMolecules(o2a.userData.atoms[0], o2b.userData.atoms[0]);
+            } else if (type === 'co2') {
+                const c = spawnElement('C', new THREE.Vector3(offsetX, offsetY, 0));
+                const o1 = spawnElement('O', new THREE.Vector3(offsetX - 1.8, offsetY, 0));
+                const o2 = spawnElement('O', new THREE.Vector3(offsetX + 1.8, offsetY, 0));
+                mergeMolecules(c.userData.atoms[0], o1.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], o1.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], o2.userData.atoms[0]);
+                mergeMolecules(c.userData.atoms[0], o2.userData.atoms[0]);
+            } else if (type === 'ammonia') {
+                const n = spawnElement('N', new THREE.Vector3(offsetX, offsetY, 0));
+                const h1 = spawnElement('H', new THREE.Vector3(offsetX - 1.2, offsetY - 0.8, 0));
+                const h2 = spawnElement('H', new THREE.Vector3(offsetX + 1.2, offsetY - 0.8, 0));
+                const h3 = spawnElement('H', new THREE.Vector3(offsetX, offsetY + 1.3, 0));
+                mergeMolecules(n.userData.atoms[0], h1.userData.atoms[0]);
+                mergeMolecules(n.userData.atoms[0], h2.userData.atoms[0]);
+                mergeMolecules(n.userData.atoms[0], h3.userData.atoms[0]);
+            }
+            updateChemicalFormula();
+        }
+
+        document.getElementById('spawn-h').addEventListener('click', () => spawnElement('H'));
+        document.getElementById('spawn-o').addEventListener('click', () => spawnElement('O'));
+        document.getElementById('spawn-c').addEventListener('click', () => spawnElement('C'));
+        document.getElementById('spawn-n').addEventListener('click', () => spawnElement('N'));
+
+        function showReactionInfo(title, desc) {
+            const modal = document.getElementById('reaction-modal');
+            document.getElementById('reaction-info-title').innerText = title;
+            document.getElementById('reaction-info-desc').innerText = desc;
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 4500);
+        }
+
+        // Smart Balanced Chemical Reaction Engine
+        document.getElementById('btn-react').addEventListener('click', () => {
+            const currentFormulas = getWorkspaceMolecules();
+            const freqMap = {};
+            currentFormulas.forEach(f => freqMap[f] = (freqMap[f] || 0) + 1);
+            
+            // Check which reaction to trigger based on freqMap
+            let isWaterReaction = (freqMap['H2'] >= 2 && freqMap['O2'] >= 1);
+            let isCombustionReaction = (freqMap['CH4'] >= 1 && freqMap['O2'] >= 2);
+            let isAmmoniaReaction = (freqMap['N2'] >= 1 && freqMap['H2'] >= 3);
+
+            if (!isWaterReaction && !isCombustionReaction && !isAmmoniaReaction) {
+                 return; // Should not reach here if button was hidden, but safe check
+            }
+
+            const flash = document.getElementById('reaction-flash');
+            flash.style.opacity = '1';
+
+            // Camera shake effect
+            let shakeTimer = 0;
+            const originalCamPos = camera.position.clone();
+            const shakeInterval = setInterval(() => {
+                shakeTimer++;
+                camera.position.x = originalCamPos.x + (Math.random() - 0.5) * 0.6;
+                camera.position.y = originalCamPos.y + (Math.random() - 0.5) * 0.6;
+                if (shakeTimer > 15) {
+                    clearInterval(shakeInterval);
+                    camera.position.copy(originalCamPos);
+                }
+            }, 30);
+
+            // Explosive energy particles
+            const particleCount = 45;
+            const particles = [];
+            const pGeo = new THREE.SphereGeometry(0.15, 8, 8);
+            const pMats = [
+                new THREE.MeshBasicMaterial({ color: 0x38bdf8 }),
+                new THREE.MeshBasicMaterial({ color: 0xf43f5e }),
+                new THREE.MeshBasicMaterial({ color: 0xfacc15 }),
+                new THREE.MeshBasicMaterial({ color: 0xffffff })
+            ];
+
+            for (let i = 0; i < particleCount; i++) {
+                const pMat = pMats[Math.floor(Math.random() * pMats.length)];
+                const p = new THREE.Mesh(pGeo, pMat);
+                p.position.set(0, 0, 0);
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                const speed = 0.15 + Math.random() * 0.35;
+                p.userData = {
+                    vel: new THREE.Vector3(
+                        speed * Math.sin(phi) * Math.cos(theta),
+                        speed * Math.sin(phi) * Math.sin(theta),
+                        speed * Math.cos(phi)
+                    )
+                };
+                scene.add(p);
+                particles.push(p);
+            }
+
+            const explosionAnim = setInterval(() => {
+                particles.forEach(p => {
+                    p.position.add(p.userData.vel);
+                    p.scale.multiplyScalar(0.92);
+                });
+            }, 20);
+
+            setTimeout(() => {
+                clearInterval(explosionAnim);
+                particles.forEach(p => scene.remove(p));
+                flash.style.opacity = '0';
+
+                // Clear workspace
+                bonds.forEach(b => scene.remove(b.mesh));
+                bonds.length = 0;
+                allMolecules.forEach(mol => scene.remove(mol));
+                allMolecules.length = 0;
+
+                if (isWaterReaction) {
+                    // Combustion of Hydrogen / Formation of Water: 2H2 + O2 -> 2H2O
+                    showReactionInfo("⚡ ผลิตภัณฑ์สมการดุล: 2H₂ + O₂ → 2H₂O", "ปฏิกิริยาเคมีคายความร้อนสูง เกิดน้ำบริสุทธิ์จากธาตุไฮโดรเจนและออกซิเจน");
+
+                    for (let i = 0; i < 2; i++) {
+                        const offsetX = (i - (2 - 1) / 2) * 3.5;
+                        const wO = spawnElement('O', new THREE.Vector3(offsetX, 0, 0));
+                        const wH1 = spawnElement('H', new THREE.Vector3(offsetX - 1.2, 0.9, 0));
+                        const wH2 = spawnElement('H', new THREE.Vector3(offsetX + 1.2, 0.9, 0));
+                        mergeMolecules(wO.userData.atoms[0], wH1.userData.atoms[0]);
+                        mergeMolecules(wO.userData.atoms[0], wH2.userData.atoms[0]);
+                    }
+                } else if (isCombustionReaction) {
+                    // Combustion of Methane: CH4 + 2O2 -> CO2 + 2H2O
+                    showReactionInfo("🔥 ผลิตภัณฑ์สมการดุล: CH₄ + 2O₂ → CO₂ + 2H₂O", "ปฏิกิริยาการเผาไหม้สมบูรณ์ของมีเทน ให้คาร์บอนไดออกไซด์และไอน้ำ");
+
+                    // Spawn CO2
+                    const c = spawnElement('C', new THREE.Vector3(-2.5, 0, 0));
+                    const o1 = spawnElement('O', new THREE.Vector3(-4.3, 0, 0));
+                    const o2 = spawnElement('O', new THREE.Vector3(-0.7, 0, 0));
+                    mergeMolecules(c.userData.atoms[0], o1.userData.atoms[0]);
+                    mergeMolecules(c.userData.atoms[0], o1.userData.atoms[0]);
+                    mergeMolecules(c.userData.atoms[0], o2.userData.atoms[0]);
+                    mergeMolecules(c.userData.atoms[0], o2.userData.atoms[0]);
+
+                    // Spawn 2 H2O
+                    for (let i = 0; i < 2; i++) {
+                        const offsetX = 2.0 + (i * 3.2);
+                        const wO = spawnElement('O', new THREE.Vector3(offsetX, 0, 0));
+                        const wH1 = spawnElement('H', new THREE.Vector3(offsetX - 1.1, 0.9, 0));
+                        const wH2 = spawnElement('H', new THREE.Vector3(offsetX + 1.1, 0.9, 0));
+                        mergeMolecules(wO.userData.atoms[0], wH1.userData.atoms[0]);
+                        mergeMolecules(wO.userData.atoms[0], wH2.userData.atoms[0]);
+                    }
+                } else if (isAmmoniaReaction) {
+                    // Ammonia synthesis: N2 + 3H2 -> 2NH3
+                    showReactionInfo("🧪 ผลิตภัณฑ์สมการดุล: N₂ + 3H₂ → 2NH₃", "กระบวนการฮาเบอร์-บอช สังเคราะห์แอมโมเนียจากไนโตรเจนและไฮโดรเจน");
+
+                    for (let i = 0; i < 2; i++) {
+                        const offsetX = (i === 0 ? -2.2 : 2.2);
+                        const n = spawnElement('N', new THREE.Vector3(offsetX, 0, 0));
+                        const h1 = spawnElement('H', new THREE.Vector3(offsetX - 1.1, -0.9, 0));
+                        const h2 = spawnElement('H', new THREE.Vector3(offsetX + 1.1, -0.9, 0));
+                        const h3 = spawnElement('H', new THREE.Vector3(offsetX, 1.2, 0));
+                        mergeMolecules(n.userData.atoms[0], h1.userData.atoms[0]);
+                        mergeMolecules(n.userData.atoms[0], h2.userData.atoms[0]);
+                        mergeMolecules(n.userData.atoms[0], h3.userData.atoms[0]);
+                    }
+                }
+
+                updateChemicalFormula();
+            }, 500);
+        });
+
+        document.getElementById('btn-clear-bonds').addEventListener('click', () => {
+            bonds.forEach(b => scene.remove(b.mesh));
+            bonds.length = 0;
+            allMolecules.forEach(mol => {
+                if (mol.userData.atoms) {
+                    mol.userData.atoms.forEach(a => {
+                        a.userData.currentBonds = 0;
+                        a.material.emissive.setHex(0x000000);
+                    });
+                }
+            });
+            firstSelectedAtom = null;
+            updateChemicalFormula();
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            bonds.forEach(b => scene.remove(b.mesh));
+            bonds.length = 0;
+            allMolecules.forEach(mol => scene.remove(mol));
+            allMolecules.length = 0;
+            firstSelectedAtom = null;
+            updateChemicalFormula();
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateAllBonds();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
